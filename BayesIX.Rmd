@@ -1,0 +1,161 @@
+---
+title: "Bayesian Statistics IX"
+author: "Matthieu Vignes"
+date: "April 2024"
+output:
+  html_document:
+    df_print: paged
+---
+
+\usepackage{blkarray}
+\usepackage{amsmath}
+\newcommand{\bm}{\boldsymbol}
+
+# Markov chain bouncing blob
+
+We devise a simple 5-state Markov chain, explore its properties, simulate from it and observe the consequences of the Weak Law of Large numbers for ergodic chains. We have a few exercises to do Monte Carlo sampling from our
+little bouncing blob Markov chain.
+
+First, we load `tidyverse` and other packages we need before we get going.  The following
+will also install them if you don't have them. 
+```{r, message=FALSE, warning=FALSE}
+packs <- c("tidyverse", "expm", "viridis")
+
+# install any that are not here
+install_em <- setdiff(packs, rownames(installed.packages()))
+if (length(install_em) > 0) install.packages(pkgs = install_em)
+
+# load em up
+dump <- lapply(packs, function(x) library(x, character.only = TRUE))
+```
+
+## Make the transition probability matrix (TPM)
+
+
+The basic setup for the bouncing blob is that we define a transition probability matrix on the 
+integers from 1 to 5 with scattering boundaries.   In code, we can make the 
+TPM like this:
+```{r make-tpm}
+P <- matrix(c(.2, .2, .2, .2, .2,
+    .2, .3, .5, 0, 0,
+    0,  .3, .4, .3, 0,
+    0, 0, .5, .3, .2,
+    .2, .2, .2, .2, .2),
+  ncol = 5, byrow = TRUE)
+P
+```
+
+
+## A function to Simulate a Markov Chain from $\mathbf{P}$
+
+For any TPM, $\mathbf{P}$, we can simulate the chain with a function like this.  In this
+version we will return a tibble
+```{r tpm-sim-func}
+#' function to simulate from a transition probability matrix
+#' @param P the transition probability matrix.  The states are assumed to be
+#' the integers from 1 to the number of rows/columns.  Rows must sum to one.
+#' @param init starting value
+#' @param steps number of steps of the chain to make
+sim_tpm <- function(P, init, steps) {
+  stopifnot(all(near(rowSums(P), 1))) # make sure rows sum to 1
+  stopifnot(init %in% 1:nrow(P)) # make sure starting point is valid
+  
+  ret  <- rep(NA, steps)  # to return values at the end
+  
+  ret[1] <- init # set first state to init
+  for (i in 2:steps) {  # updated states 2...reps, each according to the previous and P
+     ret[i] <- sample(x = 1:nrow(P), size = 1, prob = P[ret[i - 1], ])
+  }
+  
+  tibble::tibble(init = init, step = 1:steps, state = ret)
+}
+```
+
+That function just simulates a single chain for `steps` steps from starting
+value `init`.  To make it easier on everyone, we define a function here
+that will simulate multiple replicates of such a chain, each time starting
+from `init`:
+```{r}
+#' @inheritParams sim_tpm
+#' @param reps Number of replicates of the chain to run. Each time starting from init.
+sim_tpm_multi <- function(P, init, steps, reps) {
+  lapply(1:reps, function(x) sim_tpm(P, init, steps) %>% mutate(rep = x)) %>%
+    bind_rows()
+}
+```
+
+This returns a tibble with columns:
+
+- **init**: the starting stated of the chain
+- **step**: the step number within the chain
+- **state**: the state of the chain at step `step`
+- **rep**: the replicate number of the chain.  If you ran 16 reps, the values
+in this column would be between 1 and 16, inclusive.
+
+Now, for example, if you wanted to run 1000 reps of the chain for 100 steps starting from
+state 5, you could do:
+```{r}
+S1 <- sim_tpm_multi(P, 5, 100, 1000)
+```
+And, if you wanted to make a Monte Carlo approximation to the distribution of final values (step = 100) in those
+1000 replicates, you could plot it like this:
+```{r}
+S1 %>%
+  filter(step == 100) %>%
+  count(state) %>%
+  mutate(estimated_prob = n/sum(n)) %>%
+  ggplot(aes(x = state, y = estimated_prob)) +
+  geom_col(fill = "blue")
+```
+
+## Exercises
+
+
+1. From each of the 5 possible starting values (`init` of 1, 2, 3, 4, and 5),
+Simulate `reps = 1000` replicates of the bouncing blob for `steps = 100` steps.
+Use Monte Carlo sampling to approximate
+the distribution of states at `step = 100` for each of the starting
+values.  (Hint, the ggplot way to do this involves putting all the outputs
+into a single tibble and `facet_wrap()`ing over the initial states.)
+```{r, eval=FALSE}
+# Here is code to simulate all those reps
+D <- lapply(1:5, function(x) sim_tpm_multi(P = P, init = x, steps = 100, reps = 1000)) %>%
+  bind_rows()
+
+# to only retain step 100 do this:
+D100 <- D %>%
+  filter(step == 100)
+
+# now look at the results by counting or tabulating.
+D100 %>%
+  ...
+```
+
+2. Compare the results you obtained for the different starting
+values in exercise 1.  Does it appear that there is a single, unique
+limiting distribution for this Markov chain? (i.e., so long as you
+run it long enough, the probability
+of being found in any state is unaffected by where you start).
+
+3. Start at state `init = 2` in the chain, but run only a single
+replicate, (reps = 1) for `steps = 10000` steps.  But this time, look
+at the distribution of states across the 10,000 time steps
+in that single run.  Compare it to the distribution across the 1000
+replicates from different starting values in exercise 1 in this notebook.
+How do they compare
+```{r, eval=FALSE}
+# here is code to get the simulation done.
+S <- sim_tpm(P = P, init = 2, steps = 10000)
+
+# now compare this to the values at step 100 of all the reps in D100
+...
+```
+
+4. Is the Markov chain made by the bouncing blob ergodic?
+
+
+5. How could you have known the answer without even simulating from
+it?
+
+
+
