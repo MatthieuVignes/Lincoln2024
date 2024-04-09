@@ -1,0 +1,205 @@
+---
+title: "HardyWeinberg"
+author: "Jerome Goudet and Bruce Weir"
+date: "April 10, 2024"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=TRUE}
+#knitr::opts_chunk$set(echo = TRUE,results="hide",fig.show="hide")
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r}
+
+setwd("C:/Users/bsweir/Dropbox/awork/6SUMMERINSTITUTE/Lincoln2024/2.HardyWeinberg/Software")
+getwd()
+
+#install.packages("devtools")
+library(devtools)
+#install.packages("gaston")
+library(gaston)
+#install.packages("pegas")
+library(pegas)
+#install_githib("jgx65/hierfstat")
+library(hierfstat)
+#install_github("JGTeach")
+library(JGTeach)
+#install(HardyWeinberg)
+library(HardyWeinberg)
+```
+# Classic Chi-square Test
+
+From the counts nAA, nAa, naa of the three genotypes AA,Aa,aa it is easy to calculate the sample allele frequency nA=(2nAA+nAa)/(2nAA+2nAa+2naa) and form the three expected counts under HWE. For the toy example of 6AA, 3Aa, 1aa:
+
+```{r}
+ng <- c(6,3,1)
+phat <- (2*ng[1]+ng[2])/(2*sum(ng))
+chisq.test(ng,p=c(phat**2,2*phat*(1-phat),(1-phat)**2))
+```
+What happens if the sample counts are increased by a factor of 10?
+```{r}
+ng <- c(60,30,10)
+phat <- (2*ng[1]+ng[2])/(2*sum(ng))
+chisq.test(ng,p=c(phat**2,2*phat*(1-phat),(1-phat)**2))
+```
+What happens if the sample counts are increased by a factor of 100?
+```{r}
+ng <- c(600,300,100)
+phat <- (2*ng[1]+ng[2])/(2*sum(ng))
+chisq.test(ng,p=c(phat**2,2*phat*(1-phat),(1-phat)**2))
+```
+The effet of sample size n is clarified by expressing the test statistic as n*hat(f)^2.
+```
+ng<-c(6,3,1)
+phat<-(ng[1]+ng[2]/2)/sum(ng)
+fhat<- 1-ng[2]/(2*sum(ng)*phat*(1-phat))
+chisq<-sum(ng)*fhat**2
+chisq
+```
+# AMD Dataset
+
+The AMD dataset has data at 116,212 SNPs on 96 cases and 50 controls for Adult Onset Macular Degeneration. Klein et al., Science 308, 385 (2005); DOI: 10.1126/science.1109557 
+
+We will look at just the chromosome 1 SNPs for the controls.
+
+```{r}
+AMD<- read.table("AMD.txt",header=TRUE)
+dim(AMD)
+head(AMD[,1:10])
+
+control<- AMD[which(AMD$Chr==1),101:150]
+dim(control)
+
+ncontrols<-dim(control)[2]
+cAA<-apply(control,1,fun<-function(x) sum(x==1))
+cAB<-apply(control,1,fun<-function(x) sum(x==2))
+cBB<-apply(control,1,fun<-function(x) sum(x==3))
+c00<-apply(control,1,fun<-function(x) sum(x==0))
+cnt<-cAA+cAB+cBB
+phat<- (cAA+cAB/2)/cnt
+pqhat<-2*phat*(1-phat)
+```
+
+## 'Manual' calculations
+
+We can estimate the inbreeding coefficient to get a chi-square test statistic.
+To avoid dividing by zero, look only at polymorphic SNPs.
+
+#Remove SNPs with pqhat of zero
+
+```{r}
+polymorphic<-which(pqhat>0)
+length(polymorphic)
+
+pqhatc<-pqhat[polymorphic]
+cAAc<-cAA[polymorphic]
+cABc<-cAB[polymorphic]
+cBBc<-cBB[polymorphic]
+cntc<-cnt[polymorphic]
+
+fhatc<- 1 - cABc/(cntc*pqhatc)
+chisqc<- cntc*fhatc**2
+length(chisqc)
+
+pvalc<- 1-pchisq(chisqc,1)
+hist(-log10(pvalc),main="Manual p-values with no missing data")
+n<-length(pvalc)
+n
+
+```
+
+Here is the Q-Q plot for the 8205 polymorphic SNPs using the chi-square tests. Note that log10(8701)=3.91.
+
+```{r}
+plot(-log10(1:n/n),-log10(sort(pvalc)),xlim=c(0,5),ylim=c(0,15),pch=20,
+     xlab="Expected -log10(p)",ylab="-log10(p)",main="AMD Chr1 HWE Chisquare Test")
+abline(0,1,col="red")
+```
+
+## Using HardyWeinberg package
+
+
+```{r}
+
+control.counts<-cbind(cAA,cAB,cBB)
+control.countsc<-cbind(cAAc,cABc,cBBc)
+colnames(control.counts)<-c("AA","AB","BB")
+colnames(control.countsc)<-c("AA","AB","BB")
+head(control.counts)
+head(control.countsc)
+```
+
+### Chi-square Test
+
+```{r}
+pvaluesc<- HWChisqStats(control.countsc)
+n<-length(pvaluesc)
+n
+hist(pvaluesc,main="HardyWeinberg chi-square p-values")
+plot(-log10(1:n/n),-log10(sort(pvaluesc)),xlim=c(0,5),ylim=c(0,15),pch=20,
+     xlab="Expected -log10(p)",ylab="-log10(p)",main="AMD Chr1 HWE Chisquare Test")
+abline(0,1,col="red")
+```
+
+### Exact Tests
+
+
+For the exact test, there are three ways of calculating the p-value: if pvaluetype is set to dost then the p-value of a two-sided test is computed as twice the tail area of a one-sided test. When set to selome, the p-value is computed as the sum of the probabilities of all samples less or equally likely as the current sample (the usual way). When set to midp, the p-value is computed as half the probability of the current sample + the probabilities of all samples that are more extreme. Try selome and midp.
+
+```{r}
+
+pvaluese<- HWExactStats(control.counts,pvaluetype="selome")
+n<-length(pvaluese)
+n
+hist(pvaluese,xlab="Usual p-values",main="HardyWeinberg Exact p-values")
+plot(-log10(1:n/n),-log10(sort(pvaluese)),xlim=c(0,5),ylim=c(0,15),pch=20,
+     xlab="Expected -log10(p)",ylab="-log10(p)",main="HWE Exact Test, usual p-value")
+abline(0,1,col="red")
+
+
+pvaluesmp<- HWExactStats(control.counts,pvaluetype="midp")
+n<-length(pvaluesmp)
+n
+hist(pvaluesmp,xlab="Mid-p values", main="HardyWeinberg Exact p-values")
+plot(-log10(1:n/n),-log10(sort(pvaluesmp)),xlim=c(0,5),ylim=c(0,15),pch=20,
+     xlab="Expected -log10(p)",ylab="-log10(p)",main="HWE Exact Test, mid p-value")
+abline(0,1,col="red")
+```
+Now calculate HardyWeinberg exact tests only on polymorphic SNPs
+
+```{r}
+pvaluesec<- HWExactStats(control.countsc,pvaluetype="selome")
+n<-length(pvaluesec)
+n
+hist(pvaluesec,xlab="Usual p-values",main="Poymorphic Exact p-values")
+plot(-log10(1:n/n),-log10(sort(pvaluesec)),xlim=c(0,5),ylim=c(0,15),pch=20,
+     xlab="Expected -log10(p)",ylab="-log10(p)",main="Polymorphic Exact Test, usual p-value")
+abline(0,1,col="red")
+
+
+pvaluesec<- HWExactStats(control.countsc,pvaluetype="midp")
+n<-length(pvaluesec)
+n
+hist(pvaluesec,xlab="Mid-p values", main="Polymorphic Exact p-values")
+plot(-log10(1:n/n),-log10(sort(pvaluesec)),xlim=c(0,5),ylim=c(0,15),pch=20,
+     xlab="Expected -log10(p)",ylab="-log10(p)",main="Polmorphic Exact Test, mid p-value")
+abline(0,1,col="red")
+```
+# Power
+
+The HardyWeinberg package can calculate power. The parameter theta in that package is twice the parameter psi in the class slides.
+
+```{r}
+HWPower(n=100, nA=16,pA=0.08,y=c(AA=87,AB=10,BB=3),alpha=0.05,theta=4,f=NULL,
+test="exact",alternative="two.sided",pvaluetype="selome",cc=0.5)
+HWPower(n=100, nA=18,pA=0.09,y=c(AA=86,AB=10,BB=4),alpha=0.05,theta=4,f=NULL,
+test="exact",alternative="two.sided",pvaluetype="selome",cc=0.5)
+HWPower(n=100, nA=14,pA=0.07,y=c(AA=88,AB=10,BB=2),alpha=0.05,theta=4,f=NULL,
+test="exact",alternative="two.sided",pvaluetype="selome",cc=0.5)
+
+```
