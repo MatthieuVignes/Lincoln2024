@@ -1,0 +1,573 @@
+
+---
+title: "Allele frequencies and Hardy Weinberg"
+author: "Jerome Goudet and Bruce Weir"
+date: '`r Sys.Date()`'
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+---
+\section{Allelic frequencies}
+
+Illustrates  slide 46 and followings
+
+Let's start with a few 'words' about binomial distribution
+
+First of all, we can reproduce the figure on slide 43 with the following code:
+
+```{r}
+#reproduces slide 43
+L<-function(p,x,n) choose(n,x)*p^x*(1-p)^(n-x) #binom dist
+p<-0:1000/1000 #x axis
+n<-4
+plot(p,L(p,0,n),type="l")
+lines(p,L(p,1,n),col="blue")
+lines(p,L(p,2,n),col="red")
+lines(p,L(p,3,n),col="orange")
+lines(p,L(p,4,n),col="green")
+```
+
+Easy to extend it to a larger n
+
+```{r}
+n<-10
+plot(p,L(p,0,n),type="l")
+for (i in 1:n) lines(p,L(p,i,n),col=i)
+```
+
+Wald confidence interval:
+
+```{r}
+n<-10
+p<-0.1
+my.sd<-(p*(1-p)/n)^0.5
+(ci<-c(p-1.96*my.sd,p+1.96*my.sd)) #slide 47
+```
+
+Probability density
+
+```{r}
+n<-10
+p<-0.5
+dbinom(0:n,n,0.5)
+```
+
+How to plot probability densities? 
+
+```{r}
+n<-100
+p<-0.5
+#to illustrate plotting
+par(mfrow=c(2,2))
+plot(0:n,dbinom(0:n,n,p),type="h")
+plot(0:n,dbinom(0:n,n,p),type="p")
+plot(0:n,dbinom(0:n,n,p),type="l")
+plot(0:n,dbinom(0:n,n,p),type="h")
+lines(0:n,dnorm(0:n,mean=n*p,sd=(p*(1-p)*n)^.5))
+```
+
+With fewer draws (fewer alleles):
+
+```{r}
+n<-10
+p<-0.5
+plot(0:n,dbinom(0:n,n,p),type="h")
+lines(0:n,dnorm(0:n,mean=n*p,sd=(p*(1-p)*n)^.5))
+```
+
+and with a frequency different from $0.5$
+
+```{r}
+n<-10
+p<-0.1
+plot(0:n,dbinom(0:n,n,p),type="h")
+lines(0:n,dnorm(0:n,mean=n*p,sd=(p*(1-p)*n)^.5))
+```
+
+We see that the normal approximation is not doing a good job anymore.
+
+
+Drawing samples from the binomial distribution:
+
+```{r}
+#?rbinom
+rbinom(10,100,0.5)
+sample(rep(0:1,each=5),replace=TRUE)
+```
+
+Below is a function to compute the different types of confidence intervals we covered (slides 53-58): 
+
+```{r}
+comp.ci.binom<-function(p=0.5,n=1000,nboot=1000,digits=4){
+#illustrates slides 53-58
+x<-rbinom(1,n,p)
+p.hat<-x/n
+sd.p<-(p.hat*(1-p.hat)/n)^0.5
+norm.ci<-round(c(p.hat-1.96*sd.p,p.hat+1.96*sd.p),digits=digits) #wald ci, slide 47
+exact.ci<-round(binom.test(x,n)$conf.int[1:2],digits=digits) #exact from binomial, slide 51
+bx<-numeric(nboot)
+ox<-numeric(n);ox[1:x]<-1
+for (i in 1:nboot) bx[i]<-sum(sample(ox,replace=TRUE))
+boot.ci<-round(quantile(bx,c(0.025,0.975))/n,digits=digits) #empirical bootstrap ci, slide 52
+return(list(p.hat=p.hat,norm.ci=norm.ci,boot.ci=boot.ci,exact.ci=exact.ci))
+}
+comp.ci.binom()
+set.seed(13) #so that we all get the same values
+comp.ci.binom()
+comp.ci.binom(n=10,p=0.1)
+```
+
+\subsection{Variance of allele frequencies from genotypic data}
+
+\subsubsection{the multinomial distribution}
+
+
+To generate data from the multinomial distribution (slide 53), use `multinom`.  For instance, to illustrate the distribution of the outcome of two coin tosses:
+
+```{r}
+#slide 53
+p<-c(1/4,1/2,1/4)
+n<-2
+#10 trials of two tosses
+(res<-t(rmultinom(10,n,p)))
+```
+
+Variances and covariances for the multinomial are given slide 54, and can readilly be obtained:
+
+```{r}
+p<-c(1/4,1/2,1/4)
+n<-2
+x<-10
+(res<-t(rmultinom(x,n,p)))
+#expected var-cov matrix
+e.vcm<-outer(p,p,function(x,y) -2*x*y)
+diag(e.vcm)<-2*p*(1-p)
+e.vcm
+#obs var-cov matrix
+round(var(res),digits=3)
+#not very good estimation...
+x<-10000
+res<-t(rmultinom(x,n,p))
+round(var(res),digits=3)
+e.vcm
+#much better with more observations
+```
+
+\subsubsection{variance of allele frequencies from genotype counts}
+
+Here, we will verify that the variance of allele frequencies is not binomial when the genotypes are not in Hardy weinberg equilibrium (see slides 56 and 57):
+
+\begin{eqnarray*}
+V(n_A)&=&V(2n_{AA}+n{Aa}) \\
+&=&4V(n_{AA})+2Cov(2n_{AA},n_{Aa})+V(n_{Aa}) \\
+&=&4np_{AA}(1-p_{AA})-4np_{AA}p_{Aa}+np_{Aa}(1-p_{Aa}) \\
+&=&4np_{AA}+np_{Aa}-4np_{pAA}^2-np_{Aa}^2-4np_{AA}p_{Aa} \\
+&=&2n(2p_{AA}+\frac{p_{Aa}}{2})-n(2p_{AA}+p{Aa})^2 \\
+&=&2n(p_A+p_{AA})-4np_A^2 \\
+&=&2n(p_A)(1-p_A)+2n(p_{AA}-p_A^2)
+\end{eqnarray*}
+
+and, since $p_{AA}=p_A^2+p_A(1-p_A)f$ (slide 65), we obtain:
+
+$$
+V(n_A)=2np_A(1-p_A)(1+f)
+$$
+
+The following is an example: 
+
+```{r}
+ bootstrap<-function(x,nboot=1000){
+ n<-length(x)
+  b<-numeric(nboot)
+ for (i in 1:nboot){
+  dum<-sample(n,replace=TRUE)
+  b[i]<-sum(x[dum])/2/n
+  }
+  return(var(b))
+  }
+ obs<-rep(2:0,c(25,50,25))
+ n<-length(obs)
+ pA<-sum(obs)/2/n
+ pA*(1-pA)/2/n
+bootstrap(obs)
+ obs1<-rep(2:0,c(50,0,50))
+ n<-length(obs1)
+ pA<-sum(obs1)/2/n
+ pA*(1-pA)/2/n
+bootstrap(obs1)
+```
+
+\subsection{Estimation Maximization (EM)}
+
+It is straighforward to do expectation maximization with R. Using data from slide 75:
+
+```{r}
+(dat<-matrix(c(5,3,2,3,2,0,0,0,0),nrow=3,byrow=T))
+#(dat<-matrix(c(1,1,2,7,2,1,2,4,0),nrow=3,byrow=T))
+n<-sum(dat) # nb inds
+nA<-sum(dat[1,]*2+dat[2,]) # nb A alleles
+nB<-sum(dat[,1]*2+dat[,2]) # nb B alleles
+
+(x<-nA*nB/2/n)  #initial guess for nAB
+
+
+eps<-0.00001  #min dif
+acc<-0 #counter
+xn<-0 #next iteration of x
+dif<-1000 
+#em algorithm
+while (dif>=eps) {
+acc<-acc+1
+nAb<-nA-x 
+naB<-nB-x
+nab<-2*n-nAb-naB-x 
+xn<-2*dat[1,1]+dat[1,2]+dat[2,1]+dat[2,2]*x*nab/(x*nab+nAb*naB) #maximisation
+cat(paste(acc,":",round(x,digits=5),"->",round(xn,digits=5),"\n"))
+dif<-abs(x-xn) #how close are the 2 estimates?
+x<-xn #expectation
+}
+```
+
+This could be wrapped in a function, and used for any input data:
+
+```{r}
+em<-function(dat,ini=NULL,eps=0.00001,print.it=FALSE){
+  n<-sum(dat) # nb inds
+  nA<-sum(dat[1,]*2+dat[2,]) # nb A alleles
+  nB<-sum(dat[,1]*2+dat[,2]) # nb B alleles
+
+  if (is.null(ini)) (x<-nA*nB/2/n) else x<-ini  #initial guess for nAB
+
+  acc<-0 #counter
+  xn<-0 #next iteration of x
+  dif<-1000 
+
+    #em algorithm
+
+  while (dif>=eps) {
+    acc<-acc+1
+    nAb<-nA-x 
+    naB<-nB-x
+    nab<-2*n-nAb-naB-x 
+    xn<-2*dat[1,1]+dat[1,2]+dat[2,1]+dat[2,2]*x*nab/(x*nab+nAb*naB)
+    if (print.it) 
+      cat(paste(acc,":",round(x,digits=5),"->",round(xn,digits=5),"\n"))
+    dif<-abs(x-xn) #how close are the 2 estimates?
+    x<-xn #expectation
+  }
+return(x)
+}
+em(dat)
+em(dat,ini=20)
+em(dat,ini=0)
+
+#data from GDAII, p 76
+dat1<-matrix(c(19,5,0,8,8,0,0,0,0),byrow=TRUE,nrow=3)
+em(dat1)
+round(em(dat1)/2/sum(dat1),digits=2) #pAB
+```
+
+Sometimes the algorithm won't converge
+
+```{r,eval=FALSE}
+em(dat1,ini=40,print.it=TRUE)
+```
+
+\section{Hardy Weinberg testing}
+
+\subsection{$\chi^2$ tests}
+
+To run a chi-sqare test of goodness of fit in R, enter the argument $p$ corresponding to the expected frequencies of the different genotypes
+
+```{r}
+#slide 84
+ng<-c(6,3,1)  
+phat<-(ng[1]+ng[2]/2)/sum(ng) #allele freq
+chisq.test(ng,p=c(phat^2,2*phat*(1-phat),(1-phat)^2))
+```
+
+How large should the chi-square statistics be to reject HW at the 5\% level?
+
+```{r}
+qchisq(0.95,df=1)
+```
+
+Remember, non centrality parameter for the chi-square test is $nf^2$ (slides 85-88) . How likely am I to detect
+departure from HW if $f=0.125$ with a sample of $100$ individuals? 
+
+```{r}
+n<-100
+f<-0.125
+pchisq(qchisq(0.95,df=1),df=1,ncp=n*f^2,lower=FALSE)
+``` 
+
+and indeed (see slide 89):
+
+```{r}
+x<-seq(0.2,20,0.1)
+plot(x,dchisq(x,df=1),type="h",col="#FF000080",
+     xlab=expression(chi^2),ylab="probability density") #chisq prob dens
+lines(x,dchisq(x,df=1,ncp=n*f^2),type="h",col="#0000FF80") 
+#density of chisq with ncp nf2
+abline(v=qchisq(0.95,df=1)) # 95th centile of chisq dist 
+```
+
+You would need $500$ genotypes to detect with good power a fairly high inbreeding coefficient!
+
+```{r}
+n<-500
+f<-0.125
+pchisq(qchisq(0.95,df=1),df=1,ncp=n*f^2,lower=FALSE)
+plot(x,dchisq(x,df=1),type="h",col="#FF000080",
+     xlab=expression(chi^2),ylab="probability density")
+lines(x,dchisq(x,df=1,ncp=n*f^2),type="h",col="#0000FF80") 
+#density of chisq with ncp nf2
+abline(v=qchisq(0.95,df=1)) # 95th centile of chisq dist 
+``` 
+
+\subsection{Randomization tests}
+
+We will now use the FBI dataset to estimate heterozygosity.
+
+First, let's go back to our function calculating the different ci:
+
+```{r}
+comp.ci.binom<-function(p=0.5,n=1000,nboot=1000,digits=4){
+x<-rbinom(1,n,p)
+p.hat<-x/n
+sd.p<-(p.hat*(1-p.hat)/n)^0.5
+norm.ci<-round(c(p.hat-1.96*sd.p,p.hat+1.96*sd.p),digits=digits)
+exact.ci<-round(binom.test(x,n)$conf.int[1:2],digits=digits)
+bx<-numeric(nboot)
+ox<-numeric(n);ox[1:x]<-1
+for (i in 1:nboot) bx[i]<-sum(sample(ox,replace=TRUE))
+boot.ci<-round(quantile(bx,c(0.025,0.975))/n,digits=digits)
+return(list(p.hat=p.hat,norm.ci=norm.ci,boot.ci=boot.ci,exact.ci=exact.ci))
+}
+```
+
+and a new function to separate alleles for data of the type presented in the FBI dataset:
+
+```{r}
+getallele<-function (loc) 
+{#one locus only
+    x <- length(loc)
+    if (max(loc, na.rm = TRUE) < 1e+06) 
+        modulo = 1000
+    if (max(loc, na.rm = TRUE) < 10000) 
+        modulo <- 100
+    if (max(loc, na.rm = TRUE) < 100) 
+        modulo <- 10
+    firstal <- loc%/%modulo
+    secal <- loc%%modulo
+    y <- array(dim = c(x, 2))
+    y[ , 1] <- as.matrix(firstal)
+    y[ , 2] <- as.matrix(secal)
+    return(y)
+}
+```
+
+The following function gives a confidence interval on observed heterozygosity. It uses permutation tests (slides 116 and followings)
+
+```{r}
+hwt<-function(genotypes,nperm=2000,plotit=TRUE){
+#estimates observed heterozygosity, 
+#and gives a confidence interval of Ho under HWE 
+#as well as the probability to observed a value 
+#as low(pl) or as high (pu) as the observed
+    ho<-function(alleles){
+    #return mean observed heterozygosity of argument alleles
+        Ho <- alleles[ , 1] == alleles[ , 2]
+    mHo<-1-mean(Ho)
+    return(mHo)
+    }
+#remove missing values
+geno<-genotypes[!is.na(genotypes)]
+#separate alleles
+alleles<-getallele(geno)
+n<-length(geno)
+#calculate ho
+oHo<-ho(alleles)
+#shuffle alleles
+bHo<-numeric(nperm)
+for (i in 1:nperm)
+    {
+    dum<-sample(alleles) #sample is doing the permutations
+    bHo[i]<-ho(cbind(dum[1:n],dum[(n+1):(2*n)]))
+    }
+#ci of Ho given data under HW    
+ci<-quantile(bHo,c(0.025,0.975))
+pl<-sum(bHo<=oHo)/(nperm+1)
+pu<-sum(bHo>=oHo)/(nperm+1)
+p2<-pl+pu
+if (plotit) {hist(bHo,breaks=seq(0,1,0.02));abline(v=oHo,col="red")}
+return(list(Ho=oHo,ci=ci,pl=pl,pu=pu))
+}
+```
+
+How is this working?
+
+```{r}
+dat<-rep(c(11,12,22),c(25,50,25))
+hwt(dat)
+```
+
+Not anymore in HWE:
+
+```{r}
+dat<-rep(c(11,12,22),c(40,20,40))
+hwt(dat)
+``` 
+
+generating our own data with function \texttt{sim.genot} from package \texttt{hierfstat}
+
+```{r}
+library(hierfstat)
+(dathw<-sim.genot(nbal=20,nbpop=1))
+hwt(dathw[,2])
+```
+
+\subsection{Exact test}
+
+Now illustrate slides 94 and nexts
+
+```{r}
+library(hwde) #if needed, run install.packages("hwde") if not yet installed
+x<-rep(c(11,12,22),c(89,9,2)) #slide 101
+hwexact(89,9,2)
+hwt(x)
+hwt(x,nperm=5000)
+```
+
+```{r}
+x<-rep(c(11,12,22),c(88,11,1))
+hwexact(88,11,1)
+hwt(x,nperm=10000)
+```
+
+```{r}
+x<-rep(c(11,12,22),c(89,9,2))
+hwt(x,nperm=10000)
+```
+
+\section{Multiple tests}
+
+Illustrates slides 108 and followings
+
+Distribution of p-values for a t-test when the null hypothesis is true
+
+```{r}
+dat<-matrix(rnorm(20000),ncol=1000)
+res<-apply(dat,2,fun<-function(x)t.test(x[1:10],x[11:20])$p.value)
+par(mfrow=c(2,2))
+hist(res)
+plot((1:1000)/1000,sort(res),xlab="uniform quantiles",ylab="empirical quantiles")
+abline(c(0,1))
+plot(-log10((1:1000)/1000),-log10(sort(res)),
+xlab="uniform quantiles",ylab="empirical quantiles");abline(c(0,1))
+par(mfrow=c(1,1))
+```
+
+Note that if we want to focus on low p-vaules, only the -log10 plots will be able to identify outliers!
+
+Let's apply this to FBI dataset and departure form HWE
+
+```{r}
+fbi<-read.table("http://www2.unil.ch/popgen/teaching/SISG14/fbiwh02.txt",header=TRUE)
+#hwt(fbi[fbi[,1]==1,2]) #pop 1, loc 1
+#hwt(fbi[fbi[,1]==2,2]) #pop 2, loc 1
+#tapply(fbi[,2],fbi[,1],hwt) # all loc at once
+#matrix(unlist(tapply(fbi[,2],fbi[,1],hwt)),nrow=5)
+(res<-matrix(unlist(apply(fbi[,-1],2,function(x) tapply(x,fbi[,1],hwt,plotit=FALSE))),nrow=5))
+```
+
+
+Now plot the resulting p-values on a log10 scale, against the expected distribution if the null hypothesis is true:
+
+```{r}
+n<-dim(res)[2]
+plot(-log10((1:n)/n),-log10(sort(res[4,])),
+xlab="uniform quantiles",ylab="empirical quantiles")
+abline(c(0,1))
+```
+
+No evidence for heterozygote deficiency whatsoever, perhaps some evidence of a little excess. Normal you think?
+
+Let's move to SNPs data. Distribution of p-values for HWE for a given f value. Compare p-values from $\chi^2$ tests and exact tests.
+
+
+```{r}
+#library(hwde) 
+ntests<-10000
+ssize<-100
+pval<-numeric(ntests)
+pvale<-numeric(ntests)
+for (i in 1:ntests){
+p<-runif(1,.05,.95)
+#start with an f of 0
+f<-0.0
+#expected genotype freq given p & f
+freqs<-c(p^2+p*(1-p)*f,2*p*(1-p)*(1-f),(1-p)^2+p*(1-p)*f)
+dat<-table(factor(sample(2:0,size=ssize,replace=TRUE,prob=freqs),levels=c("2","1","0")))
+#observed allele freq
+phat<-(2*dat[1]+dat[2])/2/ssize
+#observed f
+fhat<-1-dat[2]/ssize/2/phat/(1-phat)
+pval[i]<-pchisq(ssize*fhat^2,1,lower=FALSE) #slide 92
+pvale[i]<-hwexact(dat[1],dat[2],dat[3])
+}
+plot(pvale,pval,xlab="Exact p-value",ylab="Chi-square p-value")
+abline(c(0,1))
+```
+
+QQ-plot for the two sets of estimated p-values:
+
+```{r}
+par(mfrow=c(1,2))
+plot(-log10((1:ntests)/ntests),-log10(sort(pval)),
+xlab="quantiles from uniform (-log10)",ylab="empirical quantiles chisq (-log10)")
+abline(c(0,1))
+plot(-log10((1:ntests)/ntests),-log10(sort(pvale)),
+xlab="quantiles from uniform (-log10)",ylab="empirical quantiles exact (-log10)")
+abline(c(0,1))
+par(mfrow=c(1,1))
+```
+
+Now onto the AMD dataset (slide 111)
+
+```{r}
+amd <- read.table("Bruce Weir/Dropbox/awork/6SummerInstitute/Seattle16/PopGenData/JeromeMateria/AMD.txt", header=T) #dataset need to be uncompressed first
+head(amd[,1:10]) #what's in there?
+control1<-amd[which(amd$chromosome==1),101:150] #extract data from chrom1 only and for the controls
+ncontrols<-dim(control1)[2]
+co1<-apply(control1,1,fun<-function(x) sum(x==1)) #homAA
+co2<-apply(control1,1,fun<-function(x) sum(x==2)) #het
+co3<-apply(control1,1,fun<-function(x) sum(x==3)) #homBB
+mco<-apply(control1,1,fun<-function(x) sum(x==0)) #missing
+control.counts<-cbind(co1,co2,co3)
+pvalc<-apply(control.counts,1,fun<-function(a) hwexact(a[1],a[2],a[3]))
+pvalcn1<-pvalc[which(pvalc<1.0)]
+n<-length(pvalcn1)
+plot(-log10(1:n/n),-log10(sort(pvalcn1)));abline(c(0,1)) #slide 123
+```
+
+Removing SNPs where not all individuals have been typed (slide 112):
+
+```{r}
+completen1<-which(mco==0 & pvalc<1.0)
+pvalcnmn1<-pvalc[completen1]
+(n<-length(pvalcnmn1))
+plot(-log10(1:n/n),-log10(sort(pvalcnmn1)));abline(c(0,1)) #slide 124
+```
+
+Which are the outliers?
+
+```{r}
+outliers<-which(-log10(pvalcnmn1)>4.0)
+control.counts[rownames(control.counts) %in% names(outliers),]
+amd[rownames(amd) %in% names(outliers),1:3]
+```
