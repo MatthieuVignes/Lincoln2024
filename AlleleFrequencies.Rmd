@@ -1,0 +1,190 @@
+---
+title: "Allele Frequencies"
+author: "Jerome Goudet and Bruce Weir"
+date: "April 9, 2024"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=TRUE}
+#knitr::opts_chunk$set(echo = TRUE,results="hide",fig.show="hide")
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/bsweir/Dropbox/awork/6SUMMERINSTITUTE/Otago2023/1.AlleleFreqs/Software")
+getwd()
+```
+
+
+```{r}
+pacman::p_load(devtools, gaston, pegas)
+pacman::p_load_gh("jgx65/hierfstat", "jgx65/JGTeach")
+```
+
+
+# Importing 1000Genomes Data
+
+We will illustrate methods in this course with the 1000Genomes data. These data can be downloaded from https://www.internationalgenome.org/data. 
+
+We have used Phase 3 data from May, 2013 from https://www.ncbi.nlm.nih.gov/variation/tools/1000genomes, although the browser for that site has now been retired.
+
+We have made available to you (in the data folder) two data files from that site:
+
+ * 1000GenomesSamples.txt: the individual demographics.
+ 
+ * chr22_Mb0_20.recode.vcf.gz: the first 20 Mb for Chromosome 22.
+
+Import them into R and explore their structure. At the github site for hierfstat, check out the import vignette and the read.VCF function.
+
+```{r}
+
+samp.desc<- read.table("1000GenomesSamples.txt",head=TRUE,stringsAsFactors=TRUE)  
+dim(samp.desc)
+str(samp.desc)
+
+ch22 <- read.VCF("chr22_Mb0_20.recode.vcf.gz")
+dim(ch22)
+str(ch22)
+
+#Check that the order of the samples in the ped file and the description file are the same
+all.equal(as.character(ch22@ped$id),as.character(samp.desc$sample))
+```
+
+# Individual Heterozygosities
+
+We have just created ch22@ped from file samp.desc. The variable hz in chr22@ped is the  proportion of SNPs for which each individual is heterozygous.
+
+* Make a histogram of the individual heterozygosities.
+
+* Make a boxplot of the individual heterozygosities, showing values for each super_population.
+
+* make a boxplot of individual heterozygosities, showing values for each population and colored by super-population.
+
+```{r}
+  
+hist(ch22@ped$hz,breaks=100,xlim=c(0,0.05),xlab="Individual Heterozygosity",
+          ylim=c(0,130),main="1000G Chromosome 22")
+  
+boxplot(ch22@ped$hz~samp.desc$pop,xlab="Population",ylab="Heterozygosity",
+          main="1000Genomes Individuals",las=2)
+  
+colors=c(rep("orange",7),rep("red",4),rep("green",5),rep("blue",5),
+   rep("purple",5))
+boxplot(ch22@ped$hz~with(samp.desc,factor(super_pop:pop)),
+   ylab="Heterozygosity",
+  main="1000G Individual Heterozygosities",xlab="",las=2,col=colors)
+```
+
+# SNP Heterozygosities
+  
+The file ch22@snps contains the variable hz: the proportion of individuals heterozygous for a give SNP, and the variable maf for the minor allele frequency for that SNP. The file ch22$p contains the allele frequencies (for the first allele) for each SNP.
+  
+* Make a histogram of SNP observed heteterozygosities. 
+
+* Make a histogram of allele frequencies p.
+
+* Plot the SNP heterozygosities against allele frequencies. Superimpose the expected values 2p(1-p),
+
+```{r}
+hist(ch22@snps$maf,breaks=100,xlim=c(0,0.5),xlab="MAF",main="Chromosome 22 SNPs")
+
+hist(ch22@p,breaks=100,xlab="Allele Frequency",main="Chromosome 22 SNPs")
+
+x<-0:1000/1000
+  
+plot(ch22@p,ch22@snps$hz,ylim=c(0,1),
+    xlab="Allele Frequency p",
+    ylab="Heterozygosity",
+    main="Chromosome 22 SNPs",pch=".")
+lines(x,2*x*(1-x),col="red")
+text(0.1,0.8,"2p(1-p)",col="red")
+```  
+  
+# Individual Inbreeding Coefficients
+  
+An alterative way of looking at heterozygosity is with the inbreeding coefficient. For individual j, the inbreeding coefficient is estimated as f=1-Hobs(j)/Hexp, where Hobs(j) is the number of SNPs for which j is heterozygous and Hexp is the sum over SNPs of 2p(1-p). 
+
+* Make a histogram of inbreeding estimates for all individuals.
+
+* Make a boxplot of inbreeding coefficients for individuals in each super population.
+
+```{r}
+
+h<-2*ch22@p*(1-ch22@p)
+hetexp=sum(h)
+hetobs<-ch22@ped$N1
+f<-1-hetobs/hetexp
+  
+hist(f,breaks=100,xlim=c(-1.0,1.0),ylim=c(1,100),
+       xlab="Inbreeding Coefficient",
+       main="1000G Individual Inbreeding")
+  
+boxplot(f~samp.desc$super_pop,ylim=c(-0.5,1.0),
+      xlab="Super Population", 
+      ylab="Inbreeding",main="1000G Individual Inbreeding",pch="*")
+```
+ 
+#Simulating Genetic/Genomic Data
+
+Using hierfstat and its function sim.genot (read its help page using ?sim.genot), generate a data set with the genotypes of 50 sampled individuals at 100 biallelic loci from each of 4 populations, where the populations are made of 1000 individuals and exchange migrants at a rate of 0.001. Leave mutation rate and f to their default. 
+
+```{r}
+dat<-sim.genot(nbpop=4,nbloc=100,nbal=2,size=50,N=1000,mig=0.001)
+```
+Describe the data set you have just generated. How many rows and columns are there? What is in column 1? What is in column 3?
+
+```{r}
+dim(dat)
+head(dat)
+str(dat)
+```
+
+Many analyses are phrased in terms of allele dosages (the number of copies of one of the alleles). Use the hierfstat function biall2dos to convert to dosage format.
+
+```{r}
+dos<-biall2dos(dat[,-1])
+str(dos)
+```
+
+Why do we use the [,-1] one in the previous command?
+
+
+Could fstat format a dataset with more than 2 alleles be converted to dosage format? To answer this, browse hierfstat help.
+
+[optional] explore hierfstat help and identify other functions allowing to simulate genotypic data. Describe them briefly.
+
+#Binomial Sampling
+
+Using the shiny app BinomNorm (based on function JGTeach::comp.ci.binom0, compare the accuracy of the Wald, binomial, and bootstrap confidence intervals.
+
+https://jgx65.shinyapps.io/BinomNorm/
+
+
+comp.ci.binom computes 95% confidence intervals of the probability of success using the normal approximation, bootstrapping and an exact confidence interval.
+
+Usage: comp.ci.binom(p,n,nboot,digits)
+
+Arguments:
+p:	the binomial proportion of success (frequency)
+n:	the sample size
+nboot:	the number of bootstrap samples
+digits: the number of digits to print out
+
+	For a frequency 0.5 in a sample of 1000 genes.
+
+	For a frequency of 0.1 in a sample of 10 genes.
+
+	For a frequency of 0.1 in a sample of 1000 genes.
+
+	For a frequency of 0.001 in a sample of 1000 genes.
+
+Focusing on the Wald and exact confidence intervals, infer a rule for when it is not appropriate to use the Wald confidence interval.
+
+```{r}
+
+comp.ci.binom(p=0.5,n=1000,nboot=1000,digits=4)
+comp.ci.binom(p=0.1,n=10,nboot=1000,digits=4)
+comp.ci.binom(p=0.1,n=1000,nboot=1000,digits=4)
+comp.ci.binom(p=0.001,n=1000,nboot=1000,digits=4)
+```

@@ -1,0 +1,463 @@
+---
+title: "Population Structue"
+author: "Jerome Goudet and Bruce Weir"
+date: "May 5, 2022"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,results="hide",fig.show="hide")
+```
+
+```{r}
+pacman::p_load(devtools, gaston, pegas, HardyWeinberg)
+pacman::p_load_gh("jgx65/hierfstat", "jgx65/JGTeach")
+
+```
+
+1. We will start by doing in silico Buriâ's drosophila cages experiment. We will generate using the JGTeach::drift function the allelic frequency trajectories for a number of replicates, corresponding to the different cages:
+
+```{r}
+dum<-drift(nind=100,p0=0.5,nrep=1000,ngen=100,PlotIt=TRUE)
+```
+ - Describe the figure produced.
+ - set the number of individuals to 10 ; to 1000. How does population size affects the drifting process?
+	- Set the number of individuals to 100 and the number of generation to 1000. Take time slices (generations 1, 2, 3, 5, 10, 50, 100,1000) to look at the distribution of the replicates allele frequencies over time.
+
+```{r}
+x<-drift(nind=100,ngen=1000)
+gens<-c(1,2,3,5,10,20,50,100,1000)
+
+par(mfrow=c(3,3))
+for(i in gens)
+  hist(x[i,],breaks=0:50/50,main=paste("Generation",i),xlab="Freq",ylab="")
+par(mfrow=c(1,1))
+```
+1. Describe the resulting figure and compare it to Buriâ's results
+	1.	trajectories of allele frequencies, starting with freq=0.5
+	2.	with lower pop size, fixation faster; with higher pop size, slower
+	3.	initially very tight distribution; as time goes on, more and more spread. After 100 generation, U shape.
+	4.	Very similar to Buriâ's experiment with drosophila
+ - Describe the resulting figure and compare it to Buriâ's results
+1.	trajectories of allele frequencies, starting with freq=0.5
+2.	with lower pop size, fixation faster; with higher pop size, slower
+3.	initially very tiht distribution; as time goes on, more and more spread. After 100 generation, U shape.
+4.	Very similar to Buri's experiment with drosophila
+>>>>>>> 3fb0c1de6872d15bff53c11476eb76623aa78725
+
+2.	We will use the drift function to explore some properties of drift, namely the probability and time to fixation of an allele.
+
+Theory tells us that the probability of fixation of an allele is its frequency, and that time to fixation is [4N(1-p)ln(1-p)/p] whichm for p=0.5, is 2.7N generations.
+
+ - simulate 10,000 replicates of a population of 50 diploid individuals starting with a frequency p0 = 0.5. The expected probability of fixation is 0.5, and it should take on average 135 generations to achieve fixation.
+
+```{r}
+x1<-drift(nind=50,ngen=1000,nrep=10000)
+par(mfrow=c(3,3))
+for (i in gens)
+  hist(x1[i,],breaks=seq(0,1,0.1),main=paste("Generation",i),xlab="Frequency",ylab="")
+par(mfrow=c(1,1))
+```
+
+- [optional] extract the time to fixation of the different replicates, from which you will extract both the probability and mean time to fixation.
+
+```{r}
+#Distribution of fixation times
+dist.tfix<-apply(x1,2,function(y) which(y>=1.0)[1])
+#Fixation probability
+(pfix<-sum(!is.na(dist.tfix))/10000)
+#Mean time to fixation
+(tfix<-mean(dist.tfix,na.rm=T))
+```
+
+ - [optional] Make a histogram of the time to fixation and describe it.
+
+```{r}
+hist(dist.tfix,main="Distribution of time to fixation, p0=0.5, N=50",xlab="Generations",
+     ylab="")
+abline(v=tfix,col="red",lwd=2)
+```
+
+Time to fixation is highy skewed, process is very variable.
+
+#Individual population beta's.
+
+3.	Simulate using hierfstat::sim.genot.t 3 populations evolving independently one from
+another, in order to check the approximation Î² â‰ˆ t/2N . The 3 populations have diploid sizes
+N1 = 100, N2 = 1000 and N3 = 10000 respectively. After 50 generations, we expect the beta's to be approximately 0.25, 0.025, 0.0025.
+
+```{r}
+#50 ;oci with 20 alleles each
+dat<-sim.genot.t(size=100,nbal=20,N=c(100,1000,10000),nbloc=50,mig=0.0,t=50)
+
+#Each beta is an estimate of population-specific Fst from an fstat format
+#data frame assuming random mating.
+
+betas(dat,nboot=100)$ci
+```
+ Check whether the approximation holds after 200 generations.
+
+```{r}
+#50 loci with 20 alleels each.
+dat<-sim.genot.t(size=100,nbal=20,N=c(100,1000,10000),nbloc=50,mig=0.0,t=200)
+
+#Each beta is an estimate of population-specific Fst from an fstat format
+#data frame assuming random mating.
+
+betas(dat,nboot=100)$ci
+
+#Expectation
+200/c(200,2000,20000)
+```
+
+The approximatoin t/2N works only if t<N/2, the same with sim.genot.t or ms.
+
+ - [optional] Imagine a way to do this simulation with ms.
+
+** Run the following in a bash chunk using {bash} instead of {R} **
+
+```{bash}
+# assumes mu=1e-8, r=1e-8, N0=1e+5, nbp=1e+5,
+# simulate 10 replicates, 100 diploid individuals from each pop 
+#
+# pop 4 will be the ancestral population with N4=N0=1e+5 
+# Only pops 1-3 are sampled, and there 
+# is no migration: 
+# -I 4 200 200 200 0 0
+# pop1 is a 1000th of anc pop, pop2 a 100th and pop 3 a 10th: 
+# -n 1 0.001 -n 2 0.01 -n 3 0.1
+# split occurred (backward) 50 generations ago
+# in unit of 4*Anc pop size ->50/4/10000-0.000125
+# -ej 0.000125 1 4 -ej 0.000125 2 4 -ej 0.000125 3 4
+
+./msdir/ms  600 10 -t 400 -r 400 100000 -I 4 200 200 200 0 0 -n 1 0.001 -n 2 0.01 -n 3 0.1	-ej 0.000125 1 4 -ej 0.000125 2 4 -ej 0.000125 3 4 > 3popsdrift.txt
+
+```
+
+```{r}
+bed <- ms2bed("3popsdrift.txt")
+
+#Expectation is (50/2/c(100,1000,10000))
+#but works well for t<0.2N only.
+
+fst.dosage(bed,pop=rep(1:3,each=100))
+
+```
+
+
+#Two-population system
+
+Here, we reproduce Figs 1. and 3 of Weir and Goudet (2017).
+The two-population system presented during the lecture and given in eq 5 of the paper has been implemented in JGTeach::thet.bet.2pops.
+4	[optional]. Have a look at the help page, and run the examples (Fig 1 of the paper).
+
+```{r}
+#Reproduce Figure 1 of Weir and goudet (2017)
+
+#First row:
+first<-thet.bet.2pops(mu=0.0,m2=0,m1=0.0,n1=10000,n2=100,ngen=10000)
+#Second row:
+second<-thet.bet.2pops(mu=0.001,m2=0,m1=0.0,n1=10000,n2=100,ngen=10000)
+#Third row:
+third<-thet.bet.2pops(mu=0.001,m2=0,m1=0.01,n1=10000,n2=100,ngen=10000)
+```
+Negative values of population specific Fst are not a question of precision,
+they can be negative by definition.
+
+The process leading to these negative Fst can be simulated,
+as shown in question Q5,and we can estimate them quite accurately.
+
+5	[optional]. Next you will show that the estimates matches the expected values. For this, we will make use of the hierfstat function sim.genot.metapop.t to generate genetic data according to this model.
+
+```{r, eval=FALSE}
+gens<-1:10*100
+ngen<-gens[length(gens)]
+#Generate data
+mig.mat2<-matrix(c(.99,0.01,0,1),nrow=2,byrow=TRUE)
+mig.mat2
+
+mutrate<-10^{-3}
+#10^{-6} initial value
+
+# As sim.genot.metapop.t only outputs genotypes from the
+# last generation, necessary to run the function
+# with several end time points. This is the essence of 
+# using lapply to a here
+x<-lapply(gens,function(y){
+	sim.genot.metapop.t(t=y,nbal=20,nbpop=2,N=c(10000,100),
+	mig=mig.mat2,nbloc=1000,mut=mutrate)
+	})
+ #estimate betas for data sets
+beta.x<-lapply(x,betas,nboot=1000)
+```
+
+The simulation may take some time, so a data file fig3.RData containing the results is available from the website, you should download it. Run load("fig3.RData")
+
+```{r}
+gens<-1:10*100
+ngen<-gens[length(gens)]
+#Generate data
+mig.mat2<-matrix(c(.99,0.01,0,1),nrow=2,byrow=TRUE)
+mig.mat2
+
+mutrate<-10^{-3}
+
+
+load("data/fig3.RData")
+betas.ci<-lapply(beta.x,function(x) x$ci)
+
+#Expected values
+etb1<-thet.bet.2pops(mu=mutrate,n1=10000,n2=100,m1=0.01,m2=0,ngen=ngen,plotit=FALSE)
+
+#Create the plot.
+plot(1:ngen,etb1$Be[,1],type="l",ylim=range(etb1$Be,betas.ci),col="red",lwd=2,  
+xlab="Generations",ylab=expression(beta))
+lines(1:ngen,etb1$Be[,2],col="blue",lwd=2) 
+lines(1:ngen,etb1$Be[,3],lwd=2)  
+abline(h=0)
+segments(gens,unlist(lapply(betas.ci,function(x) x[1,2])),gens, unlist(lapply(betas.ci,function(x) x[2,2])),lwd=2,col="blue")
+segments(gens,unlist(lapply(betas.ci,function(x) x[1,1])),gens, unlist(lapply(betas.ci,function(x) x[2,1])),lwd=2,col="red")
+points(gens,unlist(lapply(beta.x,function(x) x$betaiovl[1])), col="red",cex=1.5,pch=16)
+points(gens,unlist(lapply(beta.x,function(x) x$betaiovl[2])), col="blue",cex=1.5,pch=16)
+
+##Add betaW
+points(gens,unlist(lapply(beta.x,function(x) mean(x$betaiovl))), col="black",cex=1.5,pch=16)
+title("Teo populationswith migration. \n N1=10,000; N2=100; m1=0.01; m2=0")
+##See Q4 for interpretation
+```
+
+#Population specific Fst for the 1000 Genomes.
+
+We will now explore the first 20 megabases of chromosome 22 from samples of the 1000 genome
+project and will find that negative population specific Fi	are not uncommon.
+
+6.	Load chromosome 22 fragment VCF file from the 1000 genome into R (see Allele Frequencies Exercises) and the sample description.
+
+```{r}
+samp.desc<- read.table("data/1000GenomesSamples.txt",head=TRUE,stringsAsFactors=TRUE)  
+dim(samp.desc)
+    
+ch22<-read.VCF("data/chr22_Mb0_20.recode.vcf.gz")
+dim(ch22)
+```
+1. Describe object samp.desc : Print a table of the number of samples per super_pop and pop
+
+```{r}
+with(samp.desc,table(pop,super_pop))
+```
+
+There are about 100 individuals from each of 26 populations.
+Each population belongs to one of 5 continental "super-populations"
+Estimate population and continent Fst's from this dataset (it takes some time). 
+
+```{r}
+
+#This taeks about 10 minutes on laptop
+
+#From dosage data
+
+#fstch22.pop<-fst.dosage(ch22,pop=samp.desc$pop)
+#str(fstch22.pop)
+#sink(fstch22.pop)
+
+fstch22.pop<-fst.dosage(ch22,pop=samp.desc$pop)
+str(fstch22.pop)
+
+#Extract population names in correct order
+pnames<-unlist(lapply(strsplit(with(samp.desc,
+       levels(factor(paste(super_pop,pop,sep=":")))),":"),function(x) x[[2]]))                  #Forces factor to take this order
+pop<-with(samp.desc,factor(pop,levels=pnames))
+coul<-rep(c("orange","gold","red","green","blue","purple"),c(2,5,4,5,5,5))
+##ORDERING DID NOT WORK
+plot(fstch22.pop,las=2,cex.axis=0.5,col=coul)
+
+
+
+```
+
+```{r}
+
+
+ch22.M<-readRDS("data/matching.ch22.RDS")
+
+dim(ch22.M)
+
+fs.ch22.pop<-fs.dosage(ch22.M,pop=samp.desc$pop,matching=TRUE) 
+
+fs.ch22.cont<-fs.dosage(ch22.M,pop=samp.desc$super_pop,matching=TRUE) 
+
+fs.ch22.pop$Fs[2,]
+
+```
+
+There is a plot function associated with fs.dosage. Produce the corresponding plot after having ordered the population by continent and discuss the results in the light of what you know about human demographic history : the top left panel show individual inbreeding coefficients per population, relative to the mean kinship in their population. The right column
+panels show F^{XY}st (or Î²^{XY} ) on top and population specific Fst at the bottom. Last, the
+bottom left panel shows pairwise FST. Do you see a similarity between Fst and the heatmap
+of allele-sharing kinship ?
+
+```{r}
+
+#Extract popnames in the correct order
+
+pnames<-unlist(lapply(strsplit(with(samp.desc, levels(factor(paste(super_pop,pop,sep=":")))),":"),function(x) x[[2]]))
+
+#Force factor to take this order
+pop<-with(samp.desc,factor(pop,levels=pnames))
+fs.ch22.pop<-fs.dosage(ch22.M,pop=pop,matching=TRUE)
+coul<-rep(c("orange","gold","red","green","blue","purple"),c(2,5,4,5,5,5))  
+plot(fs.ch22.pop,las=2,cex.axis=0.5,col=coul)
+
+```
+
+We see the inbreeding coefficients are centered around 0, with some scatter, quite large for this small chunk (20MB from chromosome 22 only), scatter would be smaller for more SNPs / more spread along the genome.
+
+The bottom left panel shows pairwise Fst's:
+low Fst between populations within continents, High Fst between AFR populations and non AFR populations,
+
+The top right panel shows lot of similarity with the allele sharing kinship matrix. In fact, it is very close, and proportional, to the average of the individual kinships within populations
+
+From the bottom right panel:
+-all African populations have a negative Fst, consistently
+-EAS and EUR have fairly high Fst
+-SAS positive but smaller than EAS or EUR
+-AMR more heterogeneous, poulation correspond to individulas
+with admixture from different continents: a lot of AFR for Puerto Ricans, a lot of Native American for PEL, thus the heterogeneity.
+
+Pop specific Fst can be thought of as standardized gene diversity, where the standardization is the average between population diversity.
+
+#Principal Components Analysis
+
+7.	In this part, we will learn how to conduct Principal Component Analyses (PCA) on a genomic data set, [optionally] look at the different flavors of PCA, and get a feel for how to interpret the results
+
+ - Start by simulating the genotypes of 250 individuals, 50 from each of 5 populations, at 1000 bi-allelic loci, assuming an island model at equilibrium between migration, mutation and drift. Assume each island is made of 1000 individuals, with m = 0.003 between them. For this, use the sim.genot function of the hierfstat package.
+
+```{r}
+np<-5
+dat5<-sim.genot(nbal=2,nbloc=1000,nbpop=np,mig=0.003)
+```
+-Convert the data into dosage foemat using the biall2dos function
+
+```{r}
+dos<-biall2dos(dat5[,-1])
+```
+ - Transform the dosage matrix into matrix X, as done in Patterson et al. (2006). You may find the scale function useful for this.
+
+```{r}
+ps<-colMeans(dos)/2 
+sdp<-(ps*(1-ps))**(0.5)
+#first, filter out the fixed loci
+nfixed<-which(ps>0 & ps <1) 
+dosnf<-dos[,nfixed]
+
+X<-scale(dosnf)
+```
+
+Calculate XX' using the function tcrossprod
+
+```{r}
+XXT<-tcrossprod(X)
+```
+
+Obtain the eigenvalue decomposition of XX' usng the eigen function
+
+```{r}
+eigx<-eigen(XXT)
+```
+
+Obtain the individuals' coordinates UV^(1/2)
+
+```{r}
+ind.coord<-sweep(eigx$vectors,2,eigx$values**0.5,FUN="*")
+```
+
+Compare the results you obtain to what is obtained using the prcomp function on matrix X.
+
+```{r}
+prx<-prcomp(X)
+#Check equality of the absolute values of the PC's
+all.equal(abs(matrix(prx$x)),abs(matrix(ind.coord)))
+```
+
+ In a four panel graphic windows, produce the following 4 plots :
+   - 	A scree plot of the first 20 eigen values, expressed as proportion of the sum of all eigenvalues
+   - 	A plot of PC2 against PC1, using a different color for each population
+   - 	A plot of PC4 against PC3
+   -	A plot of PC6 against PC5
+
+```{r}
+par(mfrow=c(2,2)) 
+plot((eigx$values/sum(eigx$values))[1:20],type="h",
+  main="screeplot",xlab="Eigen values",ylab="") 
+plot(prx$x[,1:2],col=rep(1:np,each=50),pch=16) 
+plot(prx$x[,3:4],col=rep(1:np,each=50),pch=16) 
+plot(prx$x[,5:6],col=rep(1:np,each=50),pch=16)
+
+par(mfrow=c(1,1))
+```
+
+	Describe what you see : How many eigen values stand out ? are samples grouped according to their population of origin? 
+ If so along which axes ? How many PCs are necessary to describe the structure of this dataset?
+ 
+Four eigen values stand out on the scree plot.
+
+Samples from the different populations are well separated by PCA axes 1 to 4, but are intermingled from PCA axis 5.
+
+ - Produce a parallel coordinate plot, where the x-axis correspond to the first 5 PCA axes, and the y axis shows the coordinates of each individuals along the 5 axes, drawn as a line with color corresponding to the population in which the individual has been sampled.
+ 
+```{r}
+ colpca<-rep(1:np,each=50)
+ ns<-5
+ plot(1:ns,prx$x[1,1:ns],col=colpca[1],type="l",ylim=range(prx$x[,1:ns]), xlab="Axis",ylab="coord.",main="par. coord. plot")
+ for (i in 2:nrow(prx$x)) lines(1:ns,prx$x[i,1:ns],col=colpca[i])
+```
+
+8	[optional]. Redo this analysis on the matrix of dosages centered but not scale to sd = 1. Conclusions?
+
+```{r}
+X<-scale(dosnf,scale=FALSE) 
+XXT<-tcrossprod(X)
+eigx<-eigen(XXT)
+ind.coord<-sweep(eigx$vectors,2,eigx$values**0.5,FUN="*")
+prx<-prcomp(X) 
+all.equal(abs(matrix(prx$x)),abs(matrix(ind.coord)))
+
+par(mfrow=c(2,2)) 
+plot((eigx$values/sum(eigx$values))[1:20],type="h",
+   main="screeplot",xlab="Eigen values",ylab="") 
+plot(prx$x[,1:2],col=rep(1:np,each=50),pch=16) 
+plot(prx$x[,3:4],col=rep(1:np,each=50),pch=16) 
+plot(prx$x[,5:6],col=rep(1:np,each=50),pch=16)
+
+par(mfrow=c(1,1))
+
+```
+
+9	[optional]. Instead of using XX' for eigenvalue decomposition, use the kinship matrix KAS obtained from the allele sharing matrix. You might want to use the beta.dosage function for this. Conclusions?
+
+```{r}
+#Kas not formed
+
+Kas<-beta.dosage(dos) 
+
+eigKas<-eigen(Kas)
+
+ind.coord<-sweep(eigKas$vectors,2,eigKas$values**0.5,FUN="*")
+
+par(mfrow=c(2,2)) 
+plot((eigKas$values/sum(eigKas$values))[1:20],type="h",main="screeplot",xlab="Eigen values",ylab="") 
+
+#plot(ind.coord[,1:2],col=rep(1:np,each=50),pch=16) 
+
+plot(ind.coord[,3:4],col=rep(1:np,each=50),pch=16)
+
+plot(ind.coord[,5:6],col=rep(1:np,each=50),pch=16)
+
+par(mfrow=c(1,1))
+
+```
+We see a similar population structure (scatter of points along the 1st 4 axes according to population of origin).
+The variance along 5 rather than 4 axes stands out.
+
+The pattern is slightly more blurred than when using the cross product of the centered (scaled or not) matrix of dosage.
+
