@@ -1,4 +1,4 @@
----
+﻿---
 title: "Population Structure"
 author: "Jerome Goudet and Bruce Weir"
 date: "April 12, 2024"
@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE,results="hide",fig.show="hide")
 ```
 
 ```{r}
-setwd("C:\Users\bsweir\Dropbox\awork\6SUMMERINSTITUTE\Lincoln2024\4.PopulationStructure\Software")
+setwd("C:/Users/bsweir/Dropbox/awork/6SUMMERINSTITUTE/Lincoln2024/4.PopulationStructure/Software")
 getwd()
 
 #install.packages("devtools")
