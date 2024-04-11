@@ -1,8 +1,10 @@
 ---
-title: "Population Structue"
+title: "Population Structure"
 author: "Jerome Goudet and Bruce Weir"
-date: "May 5, 2022"
-output: html_document
+date: "April 12, 2024"
+output:
+  word_document: default
+  html_document: default
 ---
 
 
@@ -11,12 +13,26 @@ knitr::opts_chunk$set(echo = TRUE,results="hide",fig.show="hide")
 ```
 
 ```{r}
-pacman::p_load(devtools, gaston, pegas, HardyWeinberg)
-pacman::p_load_gh("jgx65/hierfstat", "jgx65/JGTeach")
+setwd("C:\Users\bsweir\Dropbox\awork\6SUMMERINSTITUTE\Lincoln2024\4.PopulationStructure\Software")
+getwd()
+
+#install.packages("devtools")
+library(devtools)
+#install.packages("gaston")
+library(gaston)
+#install.packages("pegas")
+library(pegas)
+#install_gh("jgx65/hierfstat")
+library(hierfstat)
+#install_gh("jgx65/JGTeach")
+library(JGTeach)
+#install.packages("HardyWeinberg")
+library(HardyWeinberg)
+
 
 ```
 
-1. We will start by doing in silico Buriâ's drosophila cages experiment. We will generate using the JGTeach::drift function the allelic frequency trajectories for a number of replicates, corresponding to the different cages:
+1. We will start by doing in silico Buri?'s drosophila cages experiment. We will generate using the JGTeach::drift function the allelic frequency trajectories for a number of replicates, corresponding to the different cages:
 
 ```{r}
 dum<-drift(nind=100,p0=0.5,nrep=1000,ngen=100,PlotIt=TRUE)
@@ -34,12 +50,12 @@ for(i in gens)
   hist(x[i,],breaks=0:50/50,main=paste("Generation",i),xlab="Freq",ylab="")
 par(mfrow=c(1,1))
 ```
-1. Describe the resulting figure and compare it to Buriâ's results
+1. Describe the resulting figure and compare it to Buri?'s results
 	1.	trajectories of allele frequencies, starting with freq=0.5
 	2.	with lower pop size, fixation faster; with higher pop size, slower
 	3.	initially very tight distribution; as time goes on, more and more spread. After 100 generation, U shape.
-	4.	Very similar to Buriâ's experiment with drosophila
- - Describe the resulting figure and compare it to Buriâ's results
+	4.	Very similar to Buri?'s experiment with drosophila
+ - Describe the resulting figure and compare it to Buri?'s results
 1.	trajectories of allele frequencies, starting with freq=0.5
 2.	with lower pop size, fixation faster; with higher pop size, slower
 3.	initially very tiht distribution; as time goes on, more and more spread. After 100 generation, U shape.
@@ -111,7 +127,7 @@ betas(dat,nboot=100)$ci
 200/c(200,2000,20000)
 ```
 
-The approximatoin t/2N works only if t<N/2, the same with sim.genot.t or ms.
+The approximation t/2N works only if t<N/2, the same with sim.genot.t or ms.
 
  - [optional] Imagine a way to do this simulation with ms.
 
